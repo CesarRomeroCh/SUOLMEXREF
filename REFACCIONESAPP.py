@@ -45,32 +45,25 @@ c = conn.cursor()
 
 import streamlit.components.v1 as components
 
-# Inyectar JavaScript para obtener session_id persistente del navegador
-components.html("""
+# Este bloque redirige con el session_id si no está en la URL
+components.html(f"""
 <script>
-(function() {
-  let sessionId = localStorage.getItem("persistentSessionId");
-  if (!sessionId) {
-    sessionId = self.crypto.randomUUID();
-    localStorage.setItem("persistentSessionId", sessionId);
-  }
-  const streamlitDoc = window.parent.document;
-  let input = streamlitDoc.getElementById("sessionIdInput");
-  if (!input) {
-    input = streamlitDoc.createElement("input");
-    input.type = "hidden";
-    input.id = "sessionIdInput";
-    input.name = "session_id";
-    input.value = sessionId;
-    streamlitDoc.body.appendChild(input);
-  } else {
-    input.value = sessionId;
-  }
-})();
+(function() {{
+    let sessionId = localStorage.getItem("persistentSessionId");
+    if (!sessionId) {{
+        sessionId = self.crypto.randomUUID();
+        localStorage.setItem("persistentSessionId", sessionId);
+    }}
+    const url = new URL(window.location.href);
+    if (!url.searchParams.get("session_id")) {{
+        url.searchParams.set("session_id", sessionId);
+        window.location.href = url.href;
+    }}
+}})();
 </script>
 """, height=0)
 
-# Obtener session_id persistente único por navegador
+# Ahora podemos leerlo confiablemente desde la URL
 if "session_id" not in st.session_state:
     session_id = st.query_params.get("session_id", [None])[0]
     if not session_id:
@@ -79,6 +72,7 @@ if "session_id" not in st.session_state:
 
 def path_sesion_local():
     return f"session_{st.session_state.session_id}.json"
+
 
 
 def guardar_sesion():
