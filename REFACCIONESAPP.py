@@ -5,6 +5,7 @@ from datetime import datetime
 from fpdf import FPDF
 import os
 import hashlib
+import json  # ✅ Para sesión persistente
 
 EXCEL_PATH = "inventario_suolmex.xlsx"
 LOGO_PATH = "logo_suolmex.jpg"
@@ -12,6 +13,7 @@ SELLO_PATH = "aprobado.png"
 PDF_RETIROS_PATH = "pdfs_retiros"
 PDF_INVENTARIO_PATH = "pdfs_inventario"
 BACKUP_PATH = "backups"
+SESSION_FILE = "session.json"  # ✅ Archivo de sesión
 
 os.makedirs(PDF_RETIROS_PATH, exist_ok=True)
 os.makedirs(PDF_INVENTARIO_PATH, exist_ok=True)
@@ -41,6 +43,26 @@ st.title("Control de Refacciones SUOLMEX")
 conn = sqlite3.connect("refacciones.db", check_same_thread=False)
 c = conn.cursor()
 
+# Funciones de sesión persistente
+def guardar_sesion():
+    with open(SESSION_FILE, "w") as f:
+        json.dump({
+            "logueado": st.session_state.logueado,
+            "usuario_id": st.session_state.usuario_id,
+            "codigo": st.session_state.codigo,
+            "rol": st.session_state.rol
+        }, f)
+
+def cargar_sesion():
+    if os.path.exists(SESSION_FILE):
+        with open(SESSION_FILE, "r") as f:
+            data = json.load(f)
+            st.session_state.logueado = data.get("logueado", False)
+            st.session_state.usuario_id = data.get("usuario_id", None)
+            st.session_state.codigo = data.get("codigo", None)
+            st.session_state.rol = data.get("rol", None)
+
+# Crear tablas si no existen
 c.execute("""CREATE TABLE IF NOT EXISTS empleados (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     codigo TEXT UNIQUE NOT NULL,
@@ -132,15 +154,19 @@ def generar_pdf_retiro(usuario, detalles, fecha_actual, maquina):
     ruta = os.path.join(PDF_RETIROS_PATH, nombre_archivo)
     pdf.output(ruta)
 
+# Crear usuario admin por defecto si no existe
 if not c.execute("SELECT * FROM empleados WHERE codigo = 'admin'").fetchone():
     c.execute("INSERT INTO empleados (codigo, contrasena, rol) VALUES (?, ?, ?)", ('admin', encriptar_contrasena('admin123'), 'admin'))
     conn.commit()
 
+# Cargar sesión si existe
 if "logueado" not in st.session_state:
-    st.session_state.logueado = False
-    st.session_state.usuario_id = None
-    st.session_state.codigo = None
-    st.session_state.rol = None
+    cargar_sesion()
+    if "logueado" not in st.session_state:
+        st.session_state.logueado = False
+        st.session_state.usuario_id = None
+        st.session_state.codigo = None
+        st.session_state.rol = None
 
 if not st.session_state.logueado:
     with st.form("login_form"):
@@ -155,6 +181,7 @@ if not st.session_state.logueado:
                 st.session_state.usuario_id = r[0]
                 st.session_state.codigo = codigo
                 st.session_state.rol = r[2]
+                guardar_sesion()
                 st.rerun()
             else:
                 st.error("Usuario o contraseña incorrectos.")
@@ -162,6 +189,8 @@ else:
     if st.button("Cerrar sesión"):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
+        if os.path.exists(SESSION_FILE):
+            os.remove(SESSION_FILE)
         st.rerun()
 
     st.success(f"Sesión iniciada como {st.session_state.codigo} ({st.session_state.rol})")
@@ -178,7 +207,7 @@ else:
         """).fetchall()
         for sid, emp, cod, nom, cantidad, maquina, fecha in pendientes:
             with st.expander(f"{emp} solicita {cantidad} de {cod} ({nom}) para {maquina}"):
-                if st.button(f"Aprobar {sid}"):
+                if st.button(f"Aprobar {sid}", key=f"aprobar_{sid}"):
                     ref = c.execute("SELECT id, cantidad FROM refacciones WHERE codigo = ?", (cod,)).fetchone()
                     nueva = ref[1] - cantidad
                     c.execute("UPDATE refacciones SET cantidad = ? WHERE id = ?", (nueva, ref[0]))
@@ -190,7 +219,7 @@ else:
                     conn.commit()
                     st.success("Solicitud aprobada y registrada.")
                     st.rerun()
-                if st.button(f"Rechazar {sid}"):
+                if st.button(f"Rechazar {sid}", key=f"rechazar_{sid}"):
                     c.execute("DELETE FROM solicitudes WHERE id = ?", (sid,))
                     conn.commit()
                     st.warning("Solicitud rechazada.")
@@ -304,6 +333,7 @@ else:
             for archivo in os.listdir(PDF_INVENTARIO_PATH):
                 with open(os.path.join(PDF_INVENTARIO_PATH, archivo), "rb") as f:
                     st.download_button(label=archivo, data=f.read(), file_name=archivo, key=f"inv_{archivo}")
+        pass
 
     def menu_empleado():
         st.subheader("Solicitar refacción")
@@ -339,4 +369,3 @@ else:
         menu_admin()
     else:
         menu_empleado()
-
