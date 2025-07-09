@@ -43,14 +43,43 @@ st.title("Control de Refacciones SUOLMEX")
 conn = sqlite3.connect("refacciones.db", check_same_thread=False)
 c = conn.cursor()
 
-def obtener_session_id():
-    if "session_id" not in st.session_state:
-        st.session_state.session_id = uuid.uuid4().hex
-    return st.session_state.session_id
+import streamlit.components.v1 as components
+
+# Inyectar JavaScript para obtener session_id persistente del navegador
+components.html("""
+<script>
+(function() {
+  let sessionId = localStorage.getItem("persistentSessionId");
+  if (!sessionId) {
+    sessionId = self.crypto.randomUUID();
+    localStorage.setItem("persistentSessionId", sessionId);
+  }
+  const streamlitDoc = window.parent.document;
+  let input = streamlitDoc.getElementById("sessionIdInput");
+  if (!input) {
+    input = streamlitDoc.createElement("input");
+    input.type = "hidden";
+    input.id = "sessionIdInput";
+    input.name = "session_id";
+    input.value = sessionId;
+    streamlitDoc.body.appendChild(input);
+  } else {
+    input.value = sessionId;
+  }
+})();
+</script>
+""", height=0)
+
+# Obtener session_id persistente único por navegador
+if "session_id" not in st.session_state:
+    session_id = st.experimental_get_query_params().get("session_id", [None])[0]
+    if not session_id:
+        session_id = uuid.uuid4().hex
+    st.session_state.session_id = session_id
 
 def path_sesion_local():
-    session_id = obtener_session_id()
-    return f"session_{session_id}.json"
+    return f"session_{st.session_state.session_id}.json"
+
 
 def guardar_sesion():
     ruta = path_sesion_local()
@@ -377,4 +406,3 @@ else:
         menu_admin()
     else:
         menu_empleado()
-
