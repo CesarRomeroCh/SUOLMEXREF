@@ -43,37 +43,14 @@ st.title("Control de Refacciones SUOLMEX")
 conn = sqlite3.connect("refacciones.db", check_same_thread=False)
 c = conn.cursor()
 
-import streamlit.components.v1 as components
-
-# Este bloque redirige con el session_id si no está en la URL
-components.html(f"""
-<script>
-(function() {{
-    let sessionId = localStorage.getItem("persistentSessionId");
-    if (!sessionId) {{
-        sessionId = self.crypto.randomUUID();
-        localStorage.setItem("persistentSessionId", sessionId);
-    }}
-    const url = new URL(window.location.href);
-    if (!url.searchParams.get("session_id")) {{
-        url.searchParams.set("session_id", sessionId);
-        window.location.href = url.href;
-    }}
-}})();
-</script>
-""", height=0)
-
-# Ahora podemos leerlo confiablemente desde la URL
-if "session_id" not in st.session_state:
-    session_id = st.query_params.get("session_id", [None])[0]
-    if not session_id:
-        session_id = uuid.uuid4().hex
-    st.session_state.session_id = session_id
+def obtener_session_id():
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = uuid.uuid4().hex
+    return st.session_state.session_id
 
 def path_sesion_local():
-    return f"session_{st.session_state.session_id}.json"
-
-
+    session_id = obtener_session_id()
+    return f"session_{session_id}.json"
 
 def guardar_sesion():
     ruta = path_sesion_local()
