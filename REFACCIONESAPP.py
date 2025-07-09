@@ -119,13 +119,10 @@ if not st.session_state.logueado:
 
 if st.button("Cerrar sesión"):
     for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    st.rerun()
+            del st.session_state[key]
+        st.rerun()
 
-st.success(f"Sesión iniciada como {st.session_state.codigo} ({st.session_state.rol})")
-
-# Aquí continúa tu menú admin o empleado igual que antes...
-# Si deseas que lo reescriba también completo incluyendo `menu_admin()` y `menu_empleado()` dime y lo hago.
+    st.success(f"Sesión iniciada como {st.session_state.codigo} ({st.session_state.rol})")
 
     def menu_admin():
         respaldo_semanal()
