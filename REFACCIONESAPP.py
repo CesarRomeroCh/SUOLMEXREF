@@ -72,7 +72,7 @@ components.html("""
 
 # Obtener session_id persistente único por navegador
 if "session_id" not in st.session_state:
-    session_id = st.experimental_get_query_params().get("session_id", [None])[0]
+    session_id = st.query_params.get("session_id", [None])[0]
     if not session_id:
         session_id = uuid.uuid4().hex
     st.session_state.session_id = session_id
