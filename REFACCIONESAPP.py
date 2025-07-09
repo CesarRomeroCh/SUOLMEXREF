@@ -5,6 +5,7 @@ from datetime import datetime
 from fpdf import FPDF
 import os
 import hashlib
+import json  
 
 EXCEL_PATH = "inventario_suolmex.xlsx"
 LOGO_PATH = "logo_suolmex.jpg"
@@ -12,6 +13,7 @@ SELLO_PATH = "aprobado.png"
 PDF_RETIROS_PATH = "pdfs_retiros"
 PDF_INVENTARIO_PATH = "pdfs_inventario"
 BACKUP_PATH = "backups"
+SESSION_FILE = "session.json"  
 
 os.makedirs(PDF_RETIROS_PATH, exist_ok=True)
 os.makedirs(PDF_INVENTARIO_PATH, exist_ok=True)
@@ -41,8 +43,24 @@ st.title("Control de Refacciones SUOLMEX")
 conn = sqlite3.connect("refacciones.db", check_same_thread=False)
 c = conn.cursor()
 
-def encriptar_contrasena(contra):
-    return hashlib.sha256(contra.encode()).hexdigest()
+# Funciones de sesión persistente
+def guardar_sesion():
+    with open(SESSION_FILE, "w") as f:
+        json.dump({
+            "logueado": st.session_state.logueado,
+            "usuario_id": st.session_state.usuario_id,
+            "codigo": st.session_state.codigo,
+            "rol": st.session_state.rol
+        }, f)
+
+def cargar_sesion():
+    if os.path.exists(SESSION_FILE):
+        with open(SESSION_FILE, "r") as f:
+            data = json.load(f)
+            st.session_state.logueado = data.get("logueado", False)
+            st.session_state.usuario_id = data.get("usuario_id", None)
+            st.session_state.codigo = data.get("codigo", None)
+            st.session_state.rol = data.get("rol", None)
 
 # Crear tablas si no existen
 c.execute("""CREATE TABLE IF NOT EXISTS empleados (
@@ -87,17 +105,68 @@ c.execute("""CREATE TABLE IF NOT EXISTS solicitudes (
 )""")
 conn.commit()
 
-# Crear admin si no existe
+def encriptar_contrasena(contra):
+    return hashlib.sha256(contra.encode()).hexdigest()
+
+def respaldo_semanal():
+    fecha = datetime.now().strftime("%Y%m%d")
+    dia_semana = datetime.now().weekday()
+    if dia_semana == 0:
+        db_dest = os.path.join(BACKUP_PATH, f"refacciones_backup_{fecha}.db")
+        excel_dest = os.path.join(BACKUP_PATH, f"inventario_backup_{fecha}.xlsx")
+        if not os.path.exists(db_dest):
+            with open("refacciones.db", "rb") as original, open(db_dest, "wb") as copia:
+                copia.write(original.read())
+        if os.path.exists(EXCEL_PATH) and not os.path.exists(excel_dest):
+            with open(EXCEL_PATH, "rb") as original, open(excel_dest, "wb") as copia:
+                copia.write(original.read())
+
+def generar_pdf_retiro(usuario, detalles, fecha_actual, maquina):
+    class PDF(FPDF):
+        def header(self):
+            if os.path.exists(LOGO_PATH):
+                self.image(LOGO_PATH, 10, 8, 40)
+            self.set_font("Arial", "B", 14)
+            self.cell(0, 10, "RETIRO DE REFACCIONES - SUOLMEX", ln=True, align="C")
+            self.ln(10)
+        def footer(self):
+            if os.path.exists(SELLO_PATH):
+                self.image(SELLO_PATH, x=160, y=250, w=30)
+    pdf = PDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "", 12)
+    pdf.cell(0, 10, f"Fecha y hora: {fecha_actual}", ln=True)
+    pdf.cell(0, 10, f"Empleado: {usuario}", ln=True)
+    pdf.cell(0, 10, f"Máquina: {maquina}", ln=True)
+    pdf.ln(10)
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(50, 10, "Código", border=1)
+    pdf.cell(80, 10, "Nombre", border=1)
+    pdf.cell(30, 10, "Cantidad", border=1)
+    pdf.ln()
+    pdf.set_font("Arial", "", 12)
+    for cod, nom, cantidad in detalles:
+        pdf.cell(50, 10, cod, border=1)
+        pdf.cell(80, 10, nom, border=1)
+        pdf.cell(30, 10, str(cantidad), border=1)
+        pdf.ln()
+    nombre_archivo = f"retiro_{usuario}_{fecha_actual.replace(':','-').replace(' ','_')}.pdf"
+    ruta = os.path.join(PDF_RETIROS_PATH, nombre_archivo)
+    pdf.output(ruta)
+
+# Crear usuario admin por defecto si no existe
 if not c.execute("SELECT * FROM empleados WHERE codigo = 'admin'").fetchone():
-    c.execute("INSERT INTO empleados (codigo, contrasena, rol) VALUES (?, ?, ?)",
-              ('admin', encriptar_contrasena('admin123'), 'admin'))
+    c.execute("INSERT INTO empleados (codigo, contrasena, rol) VALUES (?, ?, ?)", ('admin', encriptar_contrasena('admin123'), 'admin'))
     conn.commit()
 
+# Cargar sesión si existe
 if "logueado" not in st.session_state:
-    st.session_state.logueado = False
-    st.session_state.usuario_id = None
-    st.session_state.codigo = None
-    st.session_state.rol = None
+    cargar_sesion()
+    if "logueado" not in st.session_state:
+        st.session_state.logueado = False
+        st.session_state.usuario_id = None
+        st.session_state.codigo = None
+        st.session_state.rol = None
 
 if not st.session_state.logueado:
     with st.form("login_form"):
@@ -112,14 +181,16 @@ if not st.session_state.logueado:
                 st.session_state.usuario_id = r[0]
                 st.session_state.codigo = codigo
                 st.session_state.rol = r[2]
+                guardar_sesion()
                 st.rerun()
             else:
                 st.error("Usuario o contraseña incorrectos.")
-    st.stop()
-
-if st.button("Cerrar sesión"):
-    for key in list(st.session_state.keys()):
+else:
+    if st.button("Cerrar sesión"):
+        for key in list(st.session_state.keys()):
             del st.session_state[key]
+        if os.path.exists(SESSION_FILE):
+            os.remove(SESSION_FILE)
         st.rerun()
 
     st.success(f"Sesión iniciada como {st.session_state.codigo} ({st.session_state.rol})")
