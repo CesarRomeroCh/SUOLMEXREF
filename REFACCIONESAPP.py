@@ -5,7 +5,8 @@ from datetime import datetime
 from fpdf import FPDF
 import os
 import hashlib
-import json  
+import json
+import uuid
 
 EXCEL_PATH = "inventario_suolmex.xlsx"
 LOGO_PATH = "logo_suolmex.jpg"
@@ -13,7 +14,6 @@ SELLO_PATH = "aprobado.png"
 PDF_RETIROS_PATH = "pdfs_retiros"
 PDF_INVENTARIO_PATH = "pdfs_inventario"
 BACKUP_PATH = "backups"
-SESSION_FILE = "session.json"  
 
 os.makedirs(PDF_RETIROS_PATH, exist_ok=True)
 os.makedirs(PDF_INVENTARIO_PATH, exist_ok=True)
@@ -43,9 +43,18 @@ st.title("Control de Refacciones SUOLMEX")
 conn = sqlite3.connect("refacciones.db", check_same_thread=False)
 c = conn.cursor()
 
-# Funciones de sesión persistente
+def obtener_session_id():
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = uuid.uuid4().hex
+    return st.session_state.session_id
+
+def path_sesion_local():
+    session_id = obtener_session_id()
+    return f"session_{session_id}.json"
+
 def guardar_sesion():
-    with open(SESSION_FILE, "w") as f:
+    ruta = path_sesion_local()
+    with open(ruta, "w") as f:
         json.dump({
             "logueado": st.session_state.logueado,
             "usuario_id": st.session_state.usuario_id,
@@ -54,15 +63,15 @@ def guardar_sesion():
         }, f)
 
 def cargar_sesion():
-    if os.path.exists(SESSION_FILE):
-        with open(SESSION_FILE, "r") as f:
+    ruta = path_sesion_local()
+    if os.path.exists(ruta):
+        with open(ruta, "r") as f:
             data = json.load(f)
             st.session_state.logueado = data.get("logueado", False)
             st.session_state.usuario_id = data.get("usuario_id", None)
             st.session_state.codigo = data.get("codigo", None)
             st.session_state.rol = data.get("rol", None)
 
-# Crear tablas si no existen
 c.execute("""CREATE TABLE IF NOT EXISTS empleados (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     codigo TEXT UNIQUE NOT NULL,
@@ -154,12 +163,10 @@ def generar_pdf_retiro(usuario, detalles, fecha_actual, maquina):
     ruta = os.path.join(PDF_RETIROS_PATH, nombre_archivo)
     pdf.output(ruta)
 
-# Crear usuario admin por defecto si no existe
 if not c.execute("SELECT * FROM empleados WHERE codigo = 'admin'").fetchone():
     c.execute("INSERT INTO empleados (codigo, contrasena, rol) VALUES (?, ?, ?)", ('admin', encriptar_contrasena('admin123'), 'admin'))
     conn.commit()
 
-# Cargar sesión si existe
 if "logueado" not in st.session_state:
     cargar_sesion()
     if "logueado" not in st.session_state:
@@ -187,10 +194,11 @@ if not st.session_state.logueado:
                 st.error("Usuario o contraseña incorrectos.")
 else:
     if st.button("Cerrar sesión"):
+        ruta = path_sesion_local()
         for key in list(st.session_state.keys()):
             del st.session_state[key]
-        if os.path.exists(SESSION_FILE):
-            os.remove(SESSION_FILE)
+        if os.path.exists(ruta):
+            os.remove(ruta)
         st.rerun()
 
     st.success(f"Sesión iniciada como {st.session_state.codigo} ({st.session_state.rol})")
@@ -369,3 +377,4 @@ else:
         menu_admin()
     else:
         menu_empleado()
+
