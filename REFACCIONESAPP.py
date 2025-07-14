@@ -297,6 +297,7 @@ else:
                             c.execute("UPDATE refacciones SET cantidad = ? WHERE nombre = ?", (nueva, nombre))
                             conn.commit()
                             st.success("Cantidad actualizada.")
+       
         with st.expander("Editar nombre de una refacción existente"):
             busqueda_edit = st.text_input("Buscar refacción por nombre actual")
             if busqueda_edit:
@@ -316,8 +317,7 @@ else:
                                     st.error("Ya existe una refacción con ese nombre.")
                 else:
                     st.info("No se encontraron refacciones con ese nombre.")
-
-
+                    
         with st.expander("Enviar refacción a reparación"):
             busq_rep = st.text_input("Buscar nombre para enviar a reparación")
             if busq_rep:
