@@ -297,6 +297,26 @@ else:
                             c.execute("UPDATE refacciones SET cantidad = ? WHERE nombre = ?", (nueva, nombre))
                             conn.commit()
                             st.success("Cantidad actualizada.")
+        with st.expander("Editar nombre de una refacción existente"):
+            busqueda_edit = st.text_input("Buscar refacción por nombre actual")
+            if busqueda_edit:
+                resultados = c.execute("SELECT id, nombre FROM refacciones WHERE nombre LIKE ?", (f"%{busqueda_edit}%",)).fetchall()
+                if resultados:
+                    for ref_id, nombre_actual in resultados:
+                        with st.form(f"edit_nombre_{ref_id}"):
+                            st.write(f"Nombre actual: **{nombre_actual}**")
+                            nuevo_nombre = st.text_input("Nuevo nombre", key=f"nuevo_{ref_id}")
+                            if st.form_submit_button("Actualizar nombre"):
+                                try:
+                                    c.execute("UPDATE refacciones SET nombre = ? WHERE id = ?", (nuevo_nombre, ref_id))
+                                    conn.commit()
+                                    st.success(f"Nombre actualizado: {nombre_actual} → {nuevo_nombre}")
+                                    st.rerun()
+                                except sqlite3.IntegrityError:
+                                    st.error("Ya existe una refacción con ese nombre.")
+                else:
+                    st.info("No se encontraron refacciones con ese nombre.")
+
 
         with st.expander("Enviar refacción a reparación"):
             busq_rep = st.text_input("Buscar nombre para enviar a reparación")
