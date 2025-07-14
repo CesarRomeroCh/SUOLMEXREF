@@ -463,8 +463,26 @@ else:
                     st.info("No hay movimientos para esa máquina.")
 
     def menu_empleado():
+        st.markdown("""
+            <style>
+            .ref-card {
+                background-color: #f0f4f7;
+                padding: 1rem;
+                border-radius: 10px;
+                margin-bottom: 1rem;
+                box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+            }
+            .ref-card h4 {
+                color: #00264d;
+                margin-bottom: 0.5rem;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
         st.subheader("Solicitar refacción")
-        busqueda = st.text_input("Buscar por nombre de refacción")
+
+        busqueda = st.text_input("Escribe parte del nombre de la refacción:")
+
         if busqueda:
             resultados = c.execute("""
                 SELECT id, nombre, cantidad 
@@ -473,42 +491,57 @@ else:
             """, (f"%{busqueda}%",)).fetchall()
 
             if resultados:
-                nombres = [f"{nombre} (Disponibles: {cant})" for _, nombre, cant in resultados]
-                seleccion = st.selectbox("Selecciona la refacción", nombres, key=f"sel_{busqueda}")
+                st.markdown("### Coincidencias encontradas:")
+                for ref_id, nombre, cant_disp in resultados:
+                    st.markdown(f"""
+                        <div class="ref-card">
+                            <h4>{nombre}</h4>
+                            <p><strong>Disponibles:</strong> {cant_disp}</p>
+                    """, unsafe_allow_html=True)
 
-                idx = nombres.index(seleccion)
-                ref_id, nombre, cant_disp = resultados[idx]
+                    with st.form(f"form_{ref_id}"):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            cantidad = st.number_input("Cantidad", min_value=1, max_value=cant_disp, key=f"cant_{ref_id}")
+                        with col2:
+                            maquina = st.selectbox("Máquina", ["Máquina 1", "Máquina 2", "Máquina 3", "Máquina 4"], key=f"maq_{ref_id}")
 
-                with st.form(f"form_{ref_id}"):
-                    st.markdown(f"**{nombre} (Disponibles: {cant_disp})**")
-                    cantidad = st.number_input("Cantidad", min_value=1, max_value=cant_disp, key=f"cant_{ref_id}")
-                    maquina = st.selectbox("Máquina", ["Máquina 1", "Máquina 2", "Máquina 3", "Máquina 4"], key=f"maq_{ref_id}")
-                    if st.form_submit_button("Solicitar"):
-                        existe = c.execute(
-                            "SELECT * FROM solicitudes WHERE empleado_id = ? AND refaccion_id = ?",
-                            (st.session_state.usuario_id, ref_id)
-                        ).fetchone()
-                        if existe:
-                            st.warning("Ya existe una solicitud pendiente para esta refacción.")
-                        else:
-                            c.execute("""INSERT INTO solicitudes 
-                                         (empleado_id, refaccion_id, cantidad, fecha, maquina) 
-                                         VALUES (?, ?, ?, ?, ?)""",
-                                      (st.session_state.usuario_id, ref_id, cantidad, datetime.now().strftime("%Y-%m-%d %H:%M"), maquina))
-                            conn.commit()
-                            st.success(f"Solicitud enviada para {nombre}.")
+                        if st.form_submit_button("Solicitar"):
+                            existe = c.execute(
+                                "SELECT * FROM solicitudes WHERE empleado_id = ? AND refaccion_id = ?",
+                                (st.session_state.usuario_id, ref_id)
+                            ).fetchone()
+                            if existe:
+                                st.warning("Ya existe una solicitud pendiente para esta refacción.")
+                            else:
+                                c.execute("""
+                                    INSERT INTO solicitudes 
+                                    (empleado_id, refaccion_id, cantidad, fecha, maquina) 
+                                    VALUES (?, ?, ?, ?, ?)""",
+                                    (st.session_state.usuario_id, ref_id, cantidad,
+                                     datetime.now().strftime("%Y-%m-%d %H:%M"), maquina)
+                                )
+                                conn.commit()
+                                st.success(f"Solicitud enviada para: {nombre}")
+                    st.markdown("</div>", unsafe_allow_html=True)
             else:
                 st.warning("No se encontraron refacciones con ese nombre.")
 
-        st.subheader("Sugerir refacción")
+        st.markdown("---")
+        st.subheader("Sugerir nueva refacción")
         with st.form("form_sugerencia"):
             nombre = st.text_input("Nombre sugerido")
-            comentario = st.text_area("Comentario")
+            comentario = st.text_area("Comentario o justificación")
             if st.form_submit_button("Enviar sugerencia"):
-                c.execute("INSERT INTO sugerencias (empleado_id, nombre_refaccion, comentario, fecha) VALUES (?, ?, ?, ?)",
-                          (st.session_state.usuario_id, nombre, comentario, datetime.now().strftime("%Y-%m-%d %H:%M")))
+                c.execute("""
+                    INSERT INTO sugerencias 
+                    (empleado_id, nombre_refaccion, comentario, fecha) 
+                    VALUES (?, ?, ?, ?)""",
+                    (st.session_state.usuario_id, nombre, comentario, datetime.now().strftime("%Y-%m-%d %H:%M"))
+                )
                 conn.commit()
-                st.success("Sugerencia enviada.")
+                st.success("Sugerencia enviada correctamente.")
+
 
     if st.session_state.rol == "admin":
         menu_admin()
