@@ -417,24 +417,6 @@ def menu_admin():
         except Exception as e:
             st.error(f"Ocurrió un error al consultar usuarios: {e}")
 
-# ➕ Agregar nueva refacción
-    with st.expander("Agregar nueva refacción"):
-        with st.form("form_agregar"):
-            nombre = st.text_input("Nombre")
-            cantidad = st.number_input("Cantidad inicial", min_value=1)
-            estado = st.selectbox("Estado", ["disponible", "en_reparacion", "eliminada"])
-            if st.form_submit_button("Agregar / Actualizar"):
-                if nombre.strip() != "":
-                    supabase.table("refacciones").upsert({
-                        "nombre": nombre,
-                        "cantidad": cantidad,
-                        "estado": estado
-                    }, on_conflict="nombre").execute()
-                    st.success("Refacción agregada o actualizada.")
-                    st.rerun()
-                else:
-                    st.error("El nombre no puede estar vacío.")
-
     with st.expander("Crear nuevo usuario"):
         with st.form("crear_usuario"):
             nuevo_codigo = st.text_input("Código de usuario")
@@ -462,6 +444,24 @@ def menu_admin():
                             st.success("Usuario agregado correctamente.")
                     except Exception as e:
                         st.error(f"Ocurrió un error al crear el usuario: {e}")
+                        
+# ➕ Agregar nueva refacción
+    with st.expander("Agregar nueva refacción"):
+        with st.form("form_agregar"):
+            nombre = st.text_input("Nombre")
+            cantidad = st.number_input("Cantidad inicial", min_value=1)
+            estado = st.selectbox("Estado", ["disponible", "en_reparacion", "eliminada"])
+            if st.form_submit_button("Agregar / Actualizar"):
+                if nombre.strip() != "":
+                    supabase.table("refacciones").upsert({
+                        "nombre": nombre,
+                        "cantidad": cantidad,
+                        "estado": estado
+                    }, on_conflict="nombre").execute()
+                    st.success("Refacción agregada o actualizada.")
+                    st.rerun()
+                else:
+                    st.error("El nombre no puede estar vacío.")
 
     # ➕ Sumar stock
     with st.expander("Sumar stock a refacción existente"):
