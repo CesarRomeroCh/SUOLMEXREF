@@ -435,6 +435,34 @@ def menu_admin():
                 else:
                     st.error("El nombre no puede estar vacío.")
 
+    with st.expander("Crear nuevo usuario"):
+        with st.form("crear_usuario"):
+            nuevo_codigo = st.text_input("Código de usuario")
+            nueva_contra = st.text_input("Contraseña", type="password")
+            nuevo_rol = st.selectbox("Rol", ["admin", "empleado"])
+
+            if st.form_submit_button("Crear usuario"):
+                if not nuevo_codigo or not nueva_contra:
+                    st.error("Todos los campos son obligatorios.")
+                elif len(nueva_contra) < 6:
+                    st.error("La contraseña debe tener al menos 6 caracteres.")
+                else:
+                    try:
+                    # Verificar si ya existe ese código
+                        existing = supabase.table("empleados").select("id").eq("codigo", nuevo_codigo).execute()
+                        if existing.data:
+                            st.error("El código ya existe.")
+                        else:
+                            nuevo_hash = encriptar_contrasena(nueva_contra)
+                            supabase.table("empleados").insert({
+                                "codigo": nuevo_codigo,
+                                "contrasena": nuevo_hash,
+                                "rol": nuevo_rol
+                            }).execute()
+                            st.success("Usuario agregado correctamente.")
+                    except Exception as e:
+                        st.error(f"Ocurrió un error al crear el usuario: {e}")
+
     # ➕ Sumar stock
     with st.expander("Sumar stock a refacción existente"):
         busq = st.text_input("Buscar por nombre")
