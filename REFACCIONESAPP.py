@@ -553,7 +553,6 @@ def menu_admin():
                 st.info("No hay movimientos en esta máquina.")
     
     with st.expander("Generar PDF de Retiros"):
-        st.subheader("Generar PDF de retiros anteriores")
         
         # Consultar datos incluyendo las relaciones necesarias
         movimientos = supabase.table("movimientos").select(
