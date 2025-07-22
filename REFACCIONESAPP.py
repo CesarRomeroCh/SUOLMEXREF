@@ -552,29 +552,50 @@ def menu_admin():
             else:
                 st.info("No hay movimientos en esta máquina.")
     
-    st.subheader("Generar PDF de retiros anteriores")
-
-    movimientos = supabase.table("movimientos").select("fecha, cantidad, maquina, empleados(codigo), refacciones(nombre)").order("fecha", desc=True).execute().data
-    df_movs = pd.DataFrame(movimientos)
-
-    if df_movs.empty:
-        st.info("No hay movimientos registrados aún.")
-    else:
-        df_movs["fecha_hora"] = pd.to_datetime(df_movs["fecha"])
-        df_movs["fecha_solo"] = df_movs["fecha_hora"].dt.strftime('%Y-%m-%d')
-        grupos = df_movs.groupby(["fecha", "usuario", "maquina"])
-
-        for (fecha, usuario, maquina), group in grupos:
-            detalles = list(zip(group["nombre"], group["cantidad"]))
-            nombre_archivo = f"retiro_{usuario}_{fecha.replace(':','-').replace(' ','_')}.pdf"
-            ruta = os.path.join(PDF_RETIROS_PATH, nombre_archivo)
-
-            # Evita regenerar si ya existe
-            if not os.path.exists(ruta):
-                generar_pdf_retiro(usuario, detalles, fecha, maquina)
-
-            with open(ruta, "rb") as f:
-                st.download_button(f"Descargar retiro de {usuario} - {fecha}", data=f.read(), file_name=nombre_archivo)
+        st.subheader("Generar PDF de retiros anteriores")
+        
+        # Consultar datos incluyendo las relaciones necesarias
+        movimientos = supabase.table("movimientos").select(
+            "fecha, cantidad, maquina, empleados(codigo), refacciones(nombre)"
+        ).order("fecha", desc=True).execute().data
+        
+        df_movs = pd.DataFrame(movimientos)
+        
+        if df_movs.empty:
+            st.info("No hay movimientos registrados aún.")
+        else:
+            # Convertir la columna de fecha a datetime y extraer solo la fecha
+            df_movs["fecha_hora"] = pd.to_datetime(df_movs["fecha"])
+            df_movs["fecha_solo"] = df_movs["fecha_hora"].dt.strftime('%Y-%m-%d')
+        
+            # Extraer el código del empleado como 'usuario'
+            df_movs["usuario"] = df_movs["empleados"].apply(
+                lambda x: x.get("codigo", "desconocido") if isinstance(x, dict) else "desconocido"
+            )
+        
+            # Extraer el nombre de la refacción para cada fila
+            df_movs["nombre_refaccion"] = df_movs["refacciones"].apply(
+                lambda x: x.get("nombre", "¿?") if isinstance(x, dict) else "¿?"
+            )
+        
+            # Agrupar por fecha, usuario y máquina
+            grupos = df_movs.groupby(["fecha", "usuario", "maquina"])
+        
+            for (fecha, usuario, maquina), group in grupos:
+                detalles = list(zip(group["nombre_refaccion"], group["cantidad"]))
+                nombre_archivo = f"retiro_{usuario}_{fecha.replace(':','-').replace(' ','_')}.pdf"
+                ruta = os.path.join(PDF_RETIROS_PATH, nombre_archivo)
+        
+                # Evitar duplicados
+                if not os.path.exists(ruta):
+                    generar_pdf_retiro(usuario, detalles, fecha, maquina)
+        
+                with open(ruta, "rb") as f:
+                    st.download_button(
+                        f"Descargar retiro de {usuario} - {fecha}",
+                        data=f.read(),
+                        file_name=nombre_archivo
+                    )
 
 
    # 📥 Subir inventario desde Excel (actualiza por nombre)
