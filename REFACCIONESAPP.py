@@ -552,6 +552,7 @@ def menu_admin():
             else:
                 st.info("No hay movimientos en esta máquina.")
     
+    with st.expander("Generar PDF de Retiros"):
         st.subheader("Generar PDF de retiros anteriores")
         
         # Consultar datos incluyendo las relaciones necesarias
@@ -596,6 +597,7 @@ def menu_admin():
                         data=f.read(),
                         file_name=nombre_archivo
                     )
+
 
 
    # 📥 Subir inventario desde Excel (actualiza por nombre)
