@@ -7,8 +7,12 @@ import os
 import hashlib
 import json
 import uuid
+import re
 from supabase import create_client, Client
 
+def _sanitize_key(s: str) -> str:
+    return re.sub(r'\W+', '_', str(s))
+    
 # 📆 Conexión a Supabase
 SUPABASE_URL = "https://wbilookfnxmgvyasamex.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndiaWxvb2tmbnhtZ3Z5YXNhbWV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1OTk4OTYsImV4cCI6MjA2ODE3NTg5Nn0.Onez-QnxLI5xtIgFQoHYokkTSqPv66H5jdTV4u2swu0"
@@ -513,7 +517,14 @@ def menu_admin():
             pdf.output(ruta_pdf)
 
             with open(ruta_pdf, "rb") as f:
-                st.download_button("Descargar PDF generado", data=f.read(), file_name=nombre_pdf)
+                key_inv = f"download_inventario_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                st.download_button(
+                    "Descargar PDF generado",
+                    data=f.read(),
+                    file_name=nombre_pdf,
+                    key=key_inv
+                )
+            
 
     # 🧑‍💼 Historial por refacción o máquina
     with st.expander("Historial por refacción o máquina"):
@@ -552,52 +563,48 @@ def menu_admin():
             else:
                 st.info("No hay movimientos en esta máquina.")
     
-    with st.expander("Generar PDF de Retiros"):
-        
-        # Consultar datos incluyendo las relaciones necesarias
-        movimientos = supabase.table("movimientos").select(
-            "fecha, cantidad, maquina, empleados(codigo), refacciones(nombre)"
-        ).order("fecha", desc=True).execute().data
-        
-        df_movs = pd.DataFrame(movimientos)
-        
-        if df_movs.empty:
-            st.info("No hay movimientos registrados aún.")
-        else:
-            # Convertir la columna de fecha a datetime y extraer solo la fecha
-            df_movs["fecha_hora"] = pd.to_datetime(df_movs["fecha"])
-            df_movs["fecha_solo"] = df_movs["fecha_hora"].dt.strftime('%Y-%m-%d')
-        
-            # Extraer el código del empleado como 'usuario'
-            df_movs["usuario"] = df_movs["empleados"].apply(
-                lambda x: x.get("codigo", "desconocido") if isinstance(x, dict) else "desconocido"
-            )
-        
-            # Extraer el nombre de la refacción para cada fila
-            df_movs["nombre_refaccion"] = df_movs["refacciones"].apply(
-                lambda x: x.get("nombre", "¿?") if isinstance(x, dict) else "¿?"
-            )
-        
-            # Agrupar por fecha, usuario y máquina
-            grupos = df_movs.groupby(["fecha", "usuario", "maquina"])
-        
-            for (fecha, usuario, maquina), group in grupos:
-                detalles = list(zip(group["nombre_refaccion"], group["cantidad"]))
-                nombre_archivo = f"retiro_{usuario}_{fecha.replace(':','-').replace(' ','_')}.pdf"
-                ruta = os.path.join(PDF_RETIROS_PATH, nombre_archivo)
-        
-                # Evitar duplicados
-                if not os.path.exists(ruta):
-                    generar_pdf_retiro(usuario, detalles, fecha, maquina)
-        
-                with open(ruta, "rb") as f:
-                    st.download_button(
-                        f"Descargar retiro de {usuario} - {fecha}",
-                        data=f.read(),
-                        file_name=nombre_archivo
-                    )
+with st.expander("Generar PDF de Retiros"):
+    # Consultar datos incluyendo las relaciones necesarias
+    movimientos = supabase.table("movimientos").select(
+        "fecha, cantidad, maquina, empleados(codigo), refacciones(nombre)"
+    ).order("fecha", desc=True).execute().data
 
+    df_movs = pd.DataFrame(movimientos)
 
+    if df_movs.empty:
+        st.info("No hay movimientos registrados aún.")
+    else:
+        # Convertir y normalizar campos
+        df_movs["fecha_hora"] = pd.to_datetime(df_movs["fecha"])
+        df_movs["fecha_solo"] = df_movs["fecha_hora"].dt.strftime('%Y-%m-%d')
+        df_movs["usuario"] = df_movs["empleados"].apply(
+            lambda x: x.get("codigo", "desconocido") if isinstance(x, dict) else "desconocido"
+        )
+        df_movs["nombre_refaccion"] = df_movs["refacciones"].apply(
+            lambda x: x.get("nombre", "¿?") if isinstance(x, dict) else "¿?"
+        )
+
+        # Agrupar por fecha, usuario y máquina
+        grupos = df_movs.groupby(["fecha", "usuario", "maquina"])
+
+        for idx, ((fecha, usuario, maquina), group) in enumerate(grupos):
+            detalles = list(zip(group["nombre_refaccion"], group["cantidad"]))
+            nombre_archivo = f"retiro_{usuario}_{fecha.replace(':','-').replace(' ','_')}.pdf"
+            ruta = os.path.join(PDF_RETIROS_PATH, nombre_archivo)
+
+            # Generar PDF si no existe
+            if not os.path.exists(ruta):
+                generar_pdf_retiro(usuario, detalles, fecha, maquina)
+
+            # Mostrar botón con key único
+            with open(ruta, "rb") as f:
+                key = f"download_retiro_{_sanitize_key(usuario)}_{_sanitize_key(fecha)}_{_sanitize_key(maquina)}_{idx}"
+                st.download_button(
+                    label=f"Descargar retiro de {usuario} - {fecha} ({maquina})",
+                    data=f.read(),
+                    file_name=nombre_archivo,
+                    key=key
+                )
 
    # 📥 Subir inventario desde Excel (actualiza por nombre)
     st.subheader("Subir archivo Excel para actualizar inventario")
@@ -632,3 +639,4 @@ if st.session_state.logueado:
         if os.path.exists(ruta):
             os.remove(ruta)
         st.rerun()
+
